@@ -1,0 +1,164 @@
+services:
+  core:
+    image: ghcr.io/wojiushixiaobai/core:${VERSION}
+    container_name: jms_core
+    command: start all
+    deploy:
+      mode: replicated
+      replicas: 1
+      # resources:
+        # limits:
+          # cpus: "1"
+          # memory: 1536M
+      restart_policy:
+        condition: on-failure
+      placement:
+        constraints:
+          - "node.role==worker"
+    env_file: .env
+    healthcheck:
+      test: "check http://localhost:8080/api/health/"
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 90s
+    volumes:
+      - ${VOLUME_DIR}/core/data:/opt/jumpserver/data
+    networks:
+      - net
+
+  koko:
+    image: ghcr.io/wojiushixiaobai/koko:${VERSION}
+    container_name: jms_koko
+    deploy:
+      mode: replicated
+      replicas: 1
+      # resources:
+        # limits:
+          # cpus: "0.1"
+          # memory: 128M
+      restart_policy:
+        condition: on-failure
+      placement:
+        constraints:
+          - "node.role==worker"
+    env_file: .env
+    healthcheck:
+      test: "check http://localhost:5000/koko/health/"
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    volumes:
+      - ${VOLUME_DIR}/koko/data:/opt/koko/data
+    ports:
+      - ${SSH_PORT:-2222}:${SSH_PORT:-2222}
+    networks:
+      - net
+
+  guacd:
+    image: jumpserver/guacd:1.5.5-bookworm
+    container_name: jms_guacd
+    user: root
+    deploy:
+      mode: replicated
+      replicas: 1
+      # resources:
+        # limits:
+          # cpus: "0.1"
+          # memory: 128M
+      restart_policy:
+        condition: on-failure
+      placement:
+        constraints:
+          - "node.role==worker"
+    env_file: .env
+    volumes:
+      - ${VOLUME_DIR}/lion/data:/opt/lion/data
+    networks:
+      - net
+
+  lion:
+    image: ghcr.io/wojiushixiaobai/lion:${VERSION}
+    container_name: jms_lion
+    deploy:
+      mode: replicated
+      replicas: 1
+      # resources:
+        # limits:
+          # cpus: "0.1"
+          # memory: 128M
+      restart_policy:
+        condition: on-failure
+      placement:
+        constraints:
+          - "node.role==worker"
+    env_file: .env
+    healthcheck:
+      test: "check http://localhost:8081/lion/health/"
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    volumes:
+      - ${VOLUME_DIR}/lion/data:/opt/lion/data
+    networks:
+      - net
+
+  chen:
+    image: ghcr.io/wojiushixiaobai/chen:${VERSION}
+    container_name: jms_chen
+    deploy:
+      mode: replicated
+      replicas: 1
+      # resources:
+        # limits:
+          # cpus: "0.1"
+          # memory: 128M
+      restart_policy:
+        condition: on-failure
+      placement:
+        constraints:
+          - "node.role==worker"
+    env_file: .env
+    volumes:
+      - ${VOLUME_DIR}/chen/data:/opt/chen/data
+    healthcheck:
+      test: "check http://localhost:8082/chen"
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    networks:
+      - net
+
+  web:
+    image: ghcr.io/wojiushixiaobai/web:${VERSION}
+    container_name: jms_web
+    deploy:
+      mode: replicated
+      replicas: 1
+      # resources:
+        # limits:
+          # cpus: "0.1"
+          # memory: 128M
+      restart_policy:
+        condition: on-failure
+      placement:
+        constraints:
+          - "node.role==worker"
+    env_file: .env
+    healthcheck:
+      test: "check http://localhost/api/health/"
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    volumes:
+      - ${VOLUME_DIR}/core/data:/opt/jumpserver/data
+      - ${VOLUME_DIR}/web/data/logs:/var/log/nginx
+      - ${VOLUME_DIR}/web/download:/opt/download
+    ports:
+      - ${HTTP_PORT:-80}:80
+    networks:
+      - net

@@ -1,0 +1,7 @@
+networks:
+  net:
+    driver: ${NETWORK_DRIVER:-bridge}
+    ipam:
+      driver: default
+      config:
+        - subnet: $DOCKER_SUBNET
