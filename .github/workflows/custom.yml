@@ -51,7 +51,7 @@ jobs:
       matrix:
         java_version: [ '17' ]
         node_version: [ '20' ]
-        python_version: [ '3.11' ]
+        python_version: [ '3.12' ]
         component: [ core, koko, lion, chen, lina, luna, web ]
     steps:
       - uses: actions/checkout@v4
