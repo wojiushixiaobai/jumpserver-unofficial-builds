@@ -250,7 +250,7 @@ jobs:
           context: .
           provenance: false
           file: dockerfile/${{ matrix.component }}/Dockerfile
-          platforms: linux/amd64,linux/arm64,linux/s390x
+          platforms: linux/amd64,linux/arm64
           push: true
           build-args: |
             VERSION=${{ env.version }}
