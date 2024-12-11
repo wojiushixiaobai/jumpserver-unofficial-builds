@@ -90,6 +90,7 @@ WORKDIR /opt/jumpserver
 
 RUN --mount=type=cache,target=/root/.cache \
     --mount=type=bind,from=stage-1,source=/opt/jumpserver/pyproject.toml,target=pyproject.toml \
+    --mount=type=bind,from=stage-1,source=/opt/jumpserver/poetry.lock,target=poetry.lock \
     set -e \
     && pip install poetry cryptography==${CRYPTOGRAPHY_VERSION} \
     && python3 -m venv /opt/py3 \
