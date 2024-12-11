@@ -23,7 +23,7 @@ RUN set -e \
     && chmod 755 /usr/local/bin/check \
     && rm -f /opt/*.tar.gz
 
-ARG WISP_VERSION=v0.2.3
+ARG WISP_VERSION=v0.2.4
 RUN set -e \
     && wget --quiet https://github.com/jumpserver-dev/wisp/releases/download/${WISP_VERSION}/wisp-${WISP_VERSION}-linux-${TARGETARCH}.tar.gz \
     && tar -xf wisp-${WISP_VERSION}-linux-${TARGETARCH}.tar.gz -C /usr/local/bin/ wisp \
