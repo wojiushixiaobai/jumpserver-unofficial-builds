@@ -79,6 +79,7 @@ RUN set -e \
     && rm -f /opt/*.tar.gz
 
 RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
     set -e \
     && cd /opt/koko \
     && make linux-${TARGETARCH} BUILDDIR=dist VERSION=${VERSION} \
