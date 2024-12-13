@@ -229,7 +229,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
-        if: ${{ matrix.component != 'web' }}
+        if: matrix.component != 'web'
         with:
           path: /tmp/.buildx-cache
           key: docker-${{ matrix.component }}-${{ github.sha }}
