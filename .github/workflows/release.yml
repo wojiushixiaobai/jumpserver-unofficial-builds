@@ -20,6 +20,7 @@ on:
 env:
   tag: ${{ github.event.inputs.tag }}
   version: ${{ github.event.inputs.version }}
+  image_tag: ${{ github.event.inputs.version }}-ce
 
 jobs:
   check:
@@ -224,8 +225,6 @@ jobs:
     strategy:
       matrix:
         component: [ core, koko, lion, chen, web ]
-    env:
-      image_tag: ${{ github.event.inputs.version }}-ce
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
@@ -255,7 +254,7 @@ jobs:
           context: .
           provenance: false
           file: dockerfile/${{ matrix.component }}/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64,linux/arm64,linux/s390x
           push: true
           build-args: |
             VERSION=${{ env.version }}
@@ -269,3 +268,102 @@ jobs:
         run: |
           rm -rf /tmp/.buildx-cache
           mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+
+  mirror:
+    runs-on: ubuntu-latest
+    needs: docker
+    strategy:
+      matrix:
+        mirror: [ 'cn-north-1', 'cn-north-4', 'sa-brazil-1' ]
+    steps:
+      - name: Prepare configuration
+        run: |
+          wget -qO- https://github.com/google/go-containerregistry/releases/latest/download/go-containerregistry_Linux_x86_64.tar.gz | sudo tar -xzf - -C /usr/local/bin/ crane
+          sudo chmod +x /usr/local/bin/crane
+          sudo chown root:root /usr/local/bin/crane
+
+      - name: Login to HuaweiCloud Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: swr.${{ matrix.mirror }}.myhuaweicloud.com
+          username: ${{ matrix.mirror }}@${{ secrets.HUAWEICLOUD_AK }}
+          password: ${{ secrets.HUAWEICLOUD_TOKEN }}
+
+      - name: Pull and Push Images
+        run: |
+          case ${{ matrix.mirror }} in
+            cn-north-1)
+              platform=linux/amd64
+              ;;
+            cn-north-4)
+              platform=linux/arm64
+              ;;
+            sa-brazil-1)
+              platform=linux/s390x
+              ;;
+          esac
+          registry=swr.${{ matrix.mirror }}.myhuaweicloud.com
+          apps="core koko lion chen web"
+          for image_name in $apps; do
+            crane cp --platform ${platform} ghcr.io/${{ github.repository_owner }}/${image_name}:${{ env.image_tag }} ${registry}/jumpserver/${image_name}:${{ env.image_tag }}
+          done
+          crane cp --platform ${platform} redis:7-bookworm ${registry}/library/redis:7-bookworm
+          crane cp --platform ${platform} postgres:16-bookworm ${registry}/library/postgres:16-bookworm
+
+  offline:
+    runs-on: ubuntu-latest
+    needs: docker
+    strategy:
+      matrix:
+        architecture: [ 'x86_64', 'aarch64', 's390x' ]
+    steps:
+      - name: Prepare installer
+        run: |
+          mkdir -p dist
+          git clone -b ${{ env.tag }} --depth=1 https://github.com/jumpserver/installer.git
+          rm -rf installer/hudson.* installer/.travis.yml installer/.git installer/.github
+          sed -i "s@VERSION=.*@VERSION=${{ env.image_tag }}@g" installer/static.env
+          sed -i "s@# DOCKER_IMAGE_MIRROR=1@DOCKER_IMAGE_MIRROR=1@g" installer/config-example.txt
+          sed -i "s@VERSION=.*@VERSION=${{ env.tag }}@g" installer/quick_start.sh installer/cn-quick_start.sh
+          sed -i "s@postgres:16.3-bullseye@postgres:16-bookworm@g" installer/scripts/utils.sh installer/compose/postgres.yml
+          sed -i "s@redis:7.0-bullseye@redis:7-bookworm@g" installer/scripts/utils.sh installer/compose/redis.yml
+          cp -R installer jumpserver-installer-${{ env.version }}
+          cp -R installer jumpserver-ce-${{ env.version }}-${{ matrix.architecture }}
+          sudo tar -zcvf dist/jumpserver-installer-${{ env.version }}.tar.gz jumpserver-installer-${{ env.version }}
+
+      - name: Prepare images
+        run: |
+          case ${{ matrix.architecture }} in
+            x86_64)
+              platform=linux/amd64
+              ;;
+            aarch64)
+              platform=linux/arm64
+              ;;
+            s390x)
+              platform=linux/s390x
+              ;;
+          esac
+          apps="core koko lion chen web"
+          for image_name in $apps; do
+            docker pull --platform=${platform} ghcr.io/${{ github.repository_owner }}/${image_name}:${{ env.image_tag }}
+            docker tag ghcr.io/${{ github.repository_owner }}/${image_name}:${{ env.image_tag }} jumpserver/${image_name}:${{ env.image_tag }}
+            docker rmi -f ghcr.io/${{ github.repository_owner }}/${image_name}:${{ env.image_tag }}
+          done
+          docker pull --platform=${platform} redis:7-bookworm
+          docker pull --platform=${platform} postgres:16-bookworm
+
+      - name: Build offline
+        run: |
+          cd jumpserver-ce-${{ env.version }}-${{ matrix.architecture }}/scripts
+          time bash -ex ./0_prepare.sh run
+          cd ../../
+          tar -czf dist/jumpserver-ce-${{ env.version }}-${{ matrix.architecture }}.tar.gz jumpserver-ce-${{ env.version }}-${{ matrix.architecture }}
+          cd dist
+          sha256sum jumpserver-ce-${{ env.version }}-${{ matrix.architecture }}.tar.gz > jumpserver-ce-${{ env.version }}-${{ matrix.architecture }}.sha256
+      
+      - name: Upload offline
+        run: |
+          gh release upload ${{ env.version }} dist/*.tar.gz dist/*.sha256 -R ${{ github.repository }} --clobber
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
