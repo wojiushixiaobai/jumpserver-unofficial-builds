@@ -79,7 +79,11 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     && apt-get -y install --no-install-recommends ${TOOLS}
 
 RUN set -e \
-    && curl -sSf https://sh.rustup.rs | sh -s -- -y
+    && \
+    case "${TARGETARCH}" in \
+        amd64|arm64) echo ;; \
+        *) curl -sSf https://sh.rustup.rs | sh -s -- -y ;; \
+    esac
 
 ARG CRYPTOGRAPHY_VERSION=41.0.7 \
     GRPC_PYTHON_BUILD_SYSTEM_OPENSSL=1
