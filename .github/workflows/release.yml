@@ -370,13 +370,11 @@ jobs:
           sudo -E bash -ex ./0_prepare.sh run
           cd ../../
           sudo tar -czf dist/jumpserver-ce-${{ env.version }}-${{ matrix.architecture }}.tar.gz jumpserver-ce-${{ env.version }}-${{ matrix.architecture }}
-          cd dist
-          sha256sum jumpserver-ce-${{ env.version }}-${{ matrix.architecture }}.tar.gz > jumpserver-ce-${{ env.version }}-${{ matrix.architecture }}.sha256
         env:
           BUILD_ARCH: ${{ matrix.architecture }}
       
       - name: Upload offline
         run: |
-          gh release upload ${{ env.version }} dist/*.tar.gz dist/*.sha256 -R ${{ github.repository }} --clobber
+          gh release upload ${{ env.version }} dist/*.tar.gz -R ${{ github.repository }} --clobber
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
