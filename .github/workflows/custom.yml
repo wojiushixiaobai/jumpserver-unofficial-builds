@@ -286,8 +286,10 @@ jobs:
           git clone -b ${{ env.tag }} --depth=1 https://github.com/jumpserver/installer.git
           rm -rf installer/hudson.* installer/.travis.yml installer/.git installer/.github
           sed -i "s@# DOCKER_IMAGE_MIRROR=1@DOCKER_IMAGE_MIRROR=1@g" installer/config-example.txt
-          sed -i "s@postgres:16.3-bullseye@postgres:16-bookworm@g" installer/scripts/utils.sh installer/compose/postgres.yml
+          sed -i "s@VERSION=.*@VERSION=${{ env.image_tag }}@g" installer/static.env
+          sed -i "s@VERSION=.*@VERSION=${{ env.tag }}@g" installer/quick_start.sh installer/cn-quick_start.sh
           sed -i "s@redis:7.0-bullseye@redis:7-bookworm@g" installer/scripts/utils.sh installer/compose/redis.yml
+          sed -i "s@postgres:16.3-bullseye@postgres:16-bookworm@g" installer/scripts/utils.sh installer/compose/postgres.yml
           cp -R installer jumpserver-installer-${{ env.version }}
           cp -R installer jumpserver-ce-${{ env.version }}-${{ matrix.architecture }}
           sudo tar -zcvf dist/jumpserver-installer-${{ env.version }}.tar.gz jumpserver-installer-${{ env.version }}
@@ -314,6 +316,7 @@ jobs:
           done
           docker pull --platform=${platform} redis:7-bookworm
           docker pull --platform=${platform} postgres:16-bookworm
+          docker images
 
       - name: Build offline
         run: |
