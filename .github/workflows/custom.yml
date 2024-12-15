@@ -217,6 +217,16 @@ jobs:
       matrix:
         component: [ core, koko, lion, chen, web ]
     steps:
+      - uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: false
+          swap-storage: false
+
       - uses: actions/checkout@v4
         with:
           ref: ${{ env.tag }}
