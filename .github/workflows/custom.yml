@@ -11,6 +11,21 @@ on:
         description: 'Release Version'
         required: true
         default: 'v4-dev'
+      build_binary:
+        type: boolean
+        description: 'Build Binary'
+        required: true
+        default: false
+      build_docker:
+        type: boolean
+        description: 'Build Docker'
+        required: true
+        default: false
+      build_offline:
+        type: boolean
+        description: 'Build Offline'
+        required: true
+        default: false
 
 env:
   tag: ${{ github.event.inputs.tag }}
@@ -46,6 +61,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   release:
+    if: github.event.inputs.build_binary == true
     runs-on: ubuntu-latest
     needs: check
     strategy:
@@ -211,6 +227,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   docker:
+    if: github.event.inputs.build_docker == true
     runs-on: ubuntu-latest
     needs: release
     strategy:
@@ -274,6 +291,7 @@ jobs:
           mv /tmp/.buildx-cache-new /tmp/.buildx-cache
 
   offline:
+    if: github.event.inputs.build_offline == true
     runs-on: ubuntu-latest
     needs: docker
     strategy:
@@ -318,12 +336,14 @@ jobs:
       - name: Build offline
         run: |
           cd jumpserver-ce-${{ env.version }}-${{ matrix.architecture }}/scripts
-          time bash -ex ./0_prepare.sh run
+          sudo bash -ex ./0_prepare.sh run
           cd ../../
-          tar -czf dist/jumpserver-ce-${{ env.version }}-${{ matrix.architecture }}.tar.gz jumpserver-ce-${{ env.version }}-${{ matrix.architecture }}
+          sudo -czf dist/jumpserver-ce-${{ env.version }}-${{ matrix.architecture }}.tar.gz jumpserver-ce-${{ env.version }}-${{ matrix.architecture }}
           cd dist
           sha256sum jumpserver-ce-${{ env.version }}-${{ matrix.architecture }}.tar.gz > jumpserver-ce-${{ env.version }}-${{ matrix.architecture }}.sha256
-      
+        env:
+          BUILD_ARCH: ${{ matrix.architecture }}
+
       - name: Upload offline
         run: |
           gh release upload ${{ env.version }} dist/*.tar.gz dist/*.sha256 -R ${{ github.repository }} --clobber
