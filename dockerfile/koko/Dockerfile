@@ -20,7 +20,7 @@ RUN set -e \
     && chmod 755 /usr/local/bin/wisp \
     && rm -f /opt/*.tar.gz
 
-ARG USQL_VERSION=v0.0.4
+ARG USQL_VERSION=v0.0.5
 RUN set -e \
     && wget --quiet https://github.com/jumpserver-dev/usql/releases/download/${USQL_VERSION}/usql-${USQL_VERSION}-linux-${TARGETARCH}.tar.gz \
     && tar -xf usql-${USQL_VERSION}-linux-${TARGETARCH}.tar.gz -C /usr/local/bin/ usql \
