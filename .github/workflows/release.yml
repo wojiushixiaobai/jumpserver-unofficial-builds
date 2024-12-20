@@ -317,8 +317,8 @@ jobs:
           for image_name in $apps; do
             crane cp --platform ${platform} ghcr.io/${{ github.repository_owner }}/${image_name}:${{ env.image_tag }} ${registry}/jumpserver/${image_name}:${{ env.image_tag }}
           done
-          crane cp --platform ${platform} redis:7-bookworm ${registry}/library/redis:7-bookworm
-          crane cp --platform ${platform} postgres:16-bookworm ${registry}/library/postgres:16-bookworm
+          crane cp --platform ${platform} redis:7-bookworm ${registry}/jumpserver/redis:7-bookworm
+          crane cp --platform ${platform} postgres:16-bookworm ${registry}/jumpserver/postgres:16-bookworm
 
   offline:
     runs-on: ubuntu-latest
