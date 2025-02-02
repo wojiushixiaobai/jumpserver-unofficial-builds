@@ -50,7 +50,7 @@ RUN set -e \
     && chown -R root:root /data/web \
     && rm -f /data/*.tar.gz
 
-FROM nginx:1.27-bookworm
+FROM nginx:stable-bookworm
 ENV LANG=en_US.UTF-8
 
 ARG DEPENDENCIES="                    \

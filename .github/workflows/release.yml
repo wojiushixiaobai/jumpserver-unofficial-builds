@@ -41,7 +41,7 @@ jobs:
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           git add .
-          git commit -m "Release ${{ env.version }}" || echo "No changes"
+          git commit -m "feat: Release ${{ env.version }}" || echo "No changes"
           git tag ${{ env.version }} || echo "Tag already exists"
           git push origin HEAD ${{ env.version }} || echo "Tag already pushed"
         env:
@@ -150,7 +150,7 @@ jobs:
         run: |
           poetry config virtualenvs.create false
           cp -f ../dockerfile/core/pyproject.toml .
-          poetry lock --no-update
+          poetry lock
           poetry install --only main
           sed -i "s@VERSION = .*@VERSION = '${{ env.version }}'@g" apps/jumpserver/const.py
           echo > config.yml
