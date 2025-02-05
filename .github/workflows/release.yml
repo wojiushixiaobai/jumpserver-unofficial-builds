@@ -246,6 +246,9 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
+      - name: Setup QEMU
+        run: docker run --rm --privileged ghcr.io/loong64/qemu-user-static --reset -p yes
+
       - name: Get Version
         run: |
           mkdir -p /tmp/.buildx-cache
