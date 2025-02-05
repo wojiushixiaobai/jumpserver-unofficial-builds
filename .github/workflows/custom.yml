@@ -1,4 +1,4 @@
-name: Build Custom
+name: Custom Offline
 
 on:
   workflow_dispatch:
@@ -18,267 +18,48 @@ env:
   image_tag: ${{ github.event.inputs.version }}-ce
 
 jobs:
-  check:
+  mirror:
     runs-on: ubuntu-latest
-    steps:
-      - name: Get Version
-        run: |
-          echo "Current Version: ${version}"
-
-      - name: Checkout Code
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ env.tag }}
-
-      - name: Create Tag
-        run: |
-          git config --global user.name 'github-actions[bot]'
-          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          git tag ${{ env.version }} || echo "Tag already exists"
-          git push origin ${{ env.version }} || echo "Tag already pushed"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Check Release
-        run: |
-          gh release create ${{ env.version }} -t ${{ env.version }} -n "Release ${{ env.version }}" -R ${{ github.repository }} --latest=false || echo "Release already exists"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  release:
-    runs-on: ubuntu-latest
-    needs: check
     strategy:
       matrix:
-        java_version: [ '17' ]
-        node_version: [ '20' ]
-        python_version: [ '3.11' ]
-        component: [ core, koko, lion, chen, lina, luna, web ]
+        mirror: [ 'cn-north-1', 'cn-north-4', 'sa-brazil-1' ]
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ env.tag }}
-
-      - uses: actions/cache@v4
-        with:
-          path: |
-            ~/.m2
-            ~/.npm
-            ~/.cache
-          key: ${{ runner.os }}-${{ matrix.component }}-${{ github.sha }}
-          restore-keys: ${{ runner.os }}-${{ matrix.component }}
-
-      - name: Get Version
+      - name: Prepare configuration
         run: |
-          echo "Current Version: ${version}"
+          wget -qO- https://github.com/google/go-containerregistry/releases/latest/download/go-containerregistry_Linux_x86_64.tar.gz | sudo tar -xzf - -C /usr/local/bin/ crane
+          sudo chmod +x /usr/local/bin/crane
+          sudo chown root:root /usr/local/bin/crane
 
-      - uses: actions/setup-java@v4
-        if: matrix.component == 'chen'
-        with:
-          distribution: 'oracle'
-          java-version: ${{ matrix.java_version }}
-
-      - uses: actions/setup-node@v4
-        if: contains(fromJson('["koko", "lion", "chen", "lina", "luna"]'), matrix.component)
-        with:
-          node-version: ${{ matrix.node_version }}
-
-      - uses: actions/setup-python@v5
-        if: matrix.component == 'core'
-        with:
-          python-version: ${{ matrix.python_version }}
-
-      - name: Install Dependencies for Python
-        if: matrix.component == 'core'
-        run: |
-          sudo apt-get update
-          sudo apt-get -y install --no-install-recommends gettext g++ make pkg-config libsasl2-dev libxml2-dev libxmlsec1-dev libxmlsec1-openssl libldap2-dev default-mysql-client default-libmysqlclient-dev
-          pip install poetry
-
-      - name: Create Workspace
-        run: mkdir -p dist
-
-      - name: Checkout Code for Core
-        if: matrix.component == 'core'
-        uses: actions/checkout@v4
-        with:
-          repository: jumpserver/jumpserver
-          ref: ${{ env.tag }}
-          path: ${{ matrix.component }}
-          lfs: true
-
-      - name: Checkout Code for Custom
-        if: contains(fromJson('["koko", "lion", "chen", "lina", "luna"]'), matrix.component)
-        uses: actions/checkout@v4
-        with:
-          repository: jumpserver/${{ matrix.component }}
-          ref: ${{ env.tag }}
-          path: ${{ matrix.component }}
-      
-      - name: Prepare Source Code
-        if: contains(fromJson('["koko", "lion", "web"]'), matrix.component)
-        run: |
-          case ${{ matrix.component }} in
-            koko|lion)
-              GHSHA=$(git rev-parse HEAD)
-              cd ${{ matrix.component }}
-              sed -i "s@VERSION ?=.*@VERSION := ${{ env.version }}@g" Makefile
-              sed -i "s@COMMIT := .*@COMMIT := ${GHSHA}@g" Makefile
-              sed -i 's/@cd $(UIDIR)/# @cd $(UIDIR)/g' Makefile
-              cd ..
-              cp -R ${{ matrix.component }} ${{ matrix.component }}-${{ env.version }}
-              rm -rf ${{ matrix.component }}-${{ env.version }}/.git ${{ matrix.component }}-${{ env.version }}/.github
-              ;;
-            web)
-              cp dockerfile/${{ matrix.component }}/prepare.sh .
-              ./prepare.sh
-              cd opt
-              tar -czf ../dist/web-${{ env.version }}.tar.gz download
-          esac
-
-      - name: Build Core
-        if: matrix.component == 'core'
-        run: |
-          poetry config virtualenvs.create false
-          cp -f ../dockerfile/core/pyproject.toml .
-          poetry lock --no-update
-          poetry install --only main
-          sed -i "s@VERSION = .*@VERSION = '${{ env.version }}'@g" apps/jumpserver/const.py
-          echo > config.yml
-          export SECRET_KEY=$(head -c100 < /dev/urandom | base64 | tr -dc A-Za-z0-9 | head -c 48)
-          python apps/manage.py compilemessages
-          rm -f config.yml
-          rm -rf .git .github
-          cd ..
-          cp -R core core-${{ env.version }}
-          tar -zcf dist/core-${{ env.version }}.tar.gz core-${{ env.version }}
-        working-directory: ./${{ matrix.component }}
-
-      - name: Build Web
-        if: contains(fromJson('["koko", "lion", "chen", "lina", "luna"]'), matrix.component)
-        run: |
-          case ${{ matrix.component }} in
-            koko|lion)
-              cd ui
-              yarn install
-              yarn build
-              cp -R dist ../../${{ matrix.component }}-${{ env.version }}/ui
-              cd ../../
-              tar -zcvf dist/${{ matrix.component }}-${{ env.version }}.tar.gz ${{ matrix.component }}-${{ env.version }}
-              ;;
-            chen)
-              cd frontend
-              rm -f package-lock.json yarn.lock
-              yarn config set ignore-engines true
-              yarn install
-              yarn build
-              ;;
-            lina)
-              sed -i "s@version-dev@${{ env.version }}@g" src/layout/components/NavHeader/About.vue
-              yarn install
-              yarn build
-              mv lina lina-${{ env.version }}
-              tar -zcvf ../dist/lina-${{ env.version }}.tar.gz lina-${{ env.version }}
-              ;;
-            luna)
-              sed -i "s@version =.*;@version = '${{ env.version }}';@g" src/environments/environment.prod.ts
-              yarn install
-              yarn build
-              cp -R src/assets/i18n luna/
-              mv luna luna-${{ env.version }}
-              tar -zcvf ../dist/luna-${{ env.version }}.tar.gz luna-${{ env.version }}
-              ;;
-          esac
-        working-directory: ./${{ matrix.component }}
-
-      - name: Build Binaries
-        if: matrix.component == 'chen'
-        run: |
-          mvn clean package -DskipTests
-          mkdir -p dist chen-${{ env.version }}
-          rm -f config/application-dev.yml
-          mv backend/web/target/web-*.jar chen-${{ env.version }}/chen.jar
-          mv entrypoint.sh chen-${{ env.version }}/entrypoint.sh
-          mv drivers chen-${{ env.version }}/drivers
-          mv config chen-${{ env.version }}/config
-          tar -zcvf ../dist/chen-${{ env.version }}.tar.gz chen-${{ env.version }}
-        working-directory: ./${{ matrix.component }}
-
-      - name: Upload Binaries
-        run: |
-          gh release upload ${{ env.version }} dist/*.tar.gz -R ${{ github.repository }} --clobber
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  docker:
-    runs-on: ubuntu-latest
-    needs: release
-    strategy:
-      matrix:
-        component: [ core, koko, lion, chen, web ]
-    steps:
-      - uses: jlumbroso/free-disk-space@main
-        with:
-          tool-cache: false
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: false
-          docker-images: false
-          swap-storage: false
-
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ env.tag }}
-
-      - uses: actions/cache@v4
-        if: matrix.component != 'web'
-        with:
-          path: /tmp/.buildx-cache
-          key: docker-${{ matrix.component }}-${{ github.sha }}
-          restore-keys: docker-${{ matrix.component }}
-
-      - uses: docker/setup-buildx-action@v3
-
-      - name: Setup QEMU
-        run: docker run --rm --privileged ghcr.io/loong64/qemu-user-static --reset -p yes
-
-      - name: Get Version
-        run: |
-          mkdir -p /tmp/.buildx-cache
-          echo "Current Version: ${version}"
-
-      - name: Login to GitHub Container Registry
+      - name: Login to HuaweiCloud Container Registry
         uses: docker/login-action@v3
         with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          registry: swr.${{ matrix.mirror }}.myhuaweicloud.com
+          username: ${{ matrix.mirror }}@${{ secrets.HUAWEICLOUD_AK }}
+          password: ${{ secrets.HUAWEICLOUD_TOKEN }}
 
-      - name: Build and Push
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          provenance: false
-          file: dockerfile/${{ matrix.component }}/Dockerfile
-          platforms: linux/amd64,linux/arm64,linux/s390x
-          push: true
-          build-args: |
-            VERSION=${{ env.version }}
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/${{ matrix.component }}:${{ env.image_tag }}
-          outputs: type=image,oci-mediatypes=true,compression=zstd,compression-level=3,force-compression=true
-          cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
-
-      - name: Move cache
+      - name: Pull and Push Images
         run: |
-          rm -rf /tmp/.buildx-cache
-          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+          case ${{ matrix.mirror }} in
+            cn-north-1)
+              platform=linux/amd64
+              ;;
+            cn-north-4)
+              platform=linux/arm64
+              ;;
+            sa-brazil-1)
+              platform=linux/s390x
+              ;;
+          esac
+          registry=swr.${{ matrix.mirror }}.myhuaweicloud.com
+          apps="core koko lion chen web"
+          for image_name in $apps; do
+            crane cp --platform ${platform} ghcr.io/${{ github.repository_owner }}/${image_name}:${{ env.image_tag }} ${registry}/jumpserver/${image_name}:${{ env.image_tag }}
+          done
+          crane cp --platform ${platform} redis:7-bookworm ${registry}/jumpserver/redis:7-bookworm
+          crane cp --platform ${platform} postgres:16-bookworm ${registry}/jumpserver/postgres:16-bookworm
 
   offline:
     runs-on: ubuntu-latest
-    needs: docker
     strategy:
       matrix:
         architecture: [ 'x86_64', 'aarch64', 's390x' ]
