@@ -101,6 +101,7 @@ jobs:
         if: matrix.component == 'core'
         run: |
           sudo apt-get update
+          sudo apt-get -y install --no-install-recommends gettext g++ make pkg-config
           pip install uv
 
       - name: Create Workspace
@@ -113,7 +114,6 @@ jobs:
           repository: jumpserver/jumpserver
           ref: ${{ env.tag }}
           path: ${{ matrix.component }}
-          lfs: true
 
       - name: Checkout Code for Custom
         if: contains(fromJson('["koko", "lion", "chen", "lina", "luna"]'), matrix.component)
@@ -152,6 +152,8 @@ jobs:
           cp -f ../dockerfile/core/pyproject.toml .
           uv pip install -r pyproject.toml
           sed -i "s@VERSION = .*@VERSION = '${{ env.version }}'@g" apps/jumpserver/const.py
+          wget -qO apps/common/utils/ip/geoip/GeoLite2-City.mmdb https://jms-pkg.oss-cn-beijing.aliyuncs.com/ip/GeoLite2-City.mmdb
+          wget -qO apps/common/utils/ip/ipip/ipipfree.ipdb https://jms-pkg.oss-cn-beijing.aliyuncs.com/ip/ipipfree.ipdb
           echo > config.yml
           export SECRET_KEY=$(head -c100 < /dev/urandom | base64 | tr -dc A-Za-z0-9 | head -c 48)
           python apps/manage.py compilemessages
