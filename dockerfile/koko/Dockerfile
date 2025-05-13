@@ -1,5 +1,5 @@
-FROM redis:7.0-bookworm AS stage-1
-FROM golang:1.23-bookworm AS stage-2
+FROM redis:7-bookworm AS stage-1
+FROM golang:1.24-bookworm AS stage-2
 ARG TARGETARCH
 
 WORKDIR /opt
@@ -20,7 +20,7 @@ RUN set -e \
     && chmod 755 /usr/local/bin/wisp \
     && rm -f /opt/*.tar.gz
 
-ARG USQL_VERSION=v0.0.5
+ARG USQL_VERSION=v0.0.6
 RUN set -e \
     && wget --quiet https://github.com/jumpserver-dev/usql/releases/download/${USQL_VERSION}/usql-${USQL_VERSION}-linux-${TARGETARCH}.tar.gz \
     && tar -xf usql-${USQL_VERSION}-linux-${TARGETARCH}.tar.gz -C /usr/local/bin/ usql \
@@ -28,8 +28,8 @@ RUN set -e \
     && chmod 755 /usr/local/bin/usql \
     && rm -f /opt/*.tar.gz
 
-ARG HELM_VERSION=v3.16.1
-ARG KUBECTL_VERSION=v1.31.3
+ARG HELM_VERSION=v3.17.3
+ARG KUBECTL_VERSION=v1.33.0
 RUN set -e \
     && wget --quiet -O kubectl.tar.gz https://dl.k8s.io/${KUBECTL_VERSION}/kubernetes-client-linux-${TARGETARCH}.tar.gz \
     && tar -xf kubectl.tar.gz --strip-components=3 -C /opt kubernetes/client/bin/kubectl \
@@ -45,7 +45,7 @@ RUN set -e \
     && chown root:root /usr/local/bin/rawhelm /usr/local/bin/rawkubectl \
     && rm -f /opt/*.tar.gz
 
-ARG MONGOSH_VERSION=2.3.4
+ARG MONGOSH_VERSION=2.5.1
 RUN set -e \
     && \
     case "${TARGETARCH}" in \

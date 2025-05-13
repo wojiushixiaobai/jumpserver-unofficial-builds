@@ -36,87 +36,25 @@ RUN set -e \
 FROM python:3.11-slim-bookworm AS stage-2
 ARG TARGETARCH
 
-ARG BUILD_DEPENDENCIES="              \
-        g++                           \
-        make                          \
-        pkg-config"
-
-ARG DEPENDENCIES="                    \
-        freetds-dev                   \
-        freerdp2-dev                  \
-        libaio-dev                    \
-        libffi-dev                    \
-        libfreetype6-dev              \
-        libjpeg-dev                   \
-        libkrb5-dev                   \
-        libldap2-dev                  \
-        libpq-dev                     \
-        libsasl2-dev                  \
-        libssl-dev                    \
-        libxml2-dev                   \
-        libxmlsec1-dev                \
-        libxmlsec1-openssl            \
-        libz-dev"
-
-ARG TOOLS="                           \
-        ca-certificates               \
-        curl                          \
-        default-libmysqlclient-dev    \
-        default-mysql-client          \
-        git                           \
-        unzip                         \
-        xz-utils                      \
-        wget"
-
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    set -e \
-    && rm -f /etc/apt/apt.conf.d/docker-clean \
-    && echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' >/etc/apt/apt.conf.d/keep-cache \
-    && apt-get update \
-    && apt-get -y install --no-install-recommends ${BUILD_DEPENDENCIES} \
-    && apt-get -y install --no-install-recommends ${DEPENDENCIES} \
-    && apt-get -y install --no-install-recommends ${TOOLS}
-
-RUN set -e \
-    && \
-    case "${TARGETARCH}" in \
-        amd64|arm64) echo ;; \
-        *) curl -sSf https://sh.rustup.rs | sh -s -- -y ;; \
-    esac
-
-ARG CRYPTOGRAPHY_VERSION=41.0.7 \
-    GRPC_PYTHON_BUILD_SYSTEM_OPENSSL=1
-
-ENV PATH=/root/.cargo/bin:$PATH
-
 WORKDIR /opt/jumpserver
+
+ARG UV_EXTRA_INDEX_URL=https://gitlab.com/api/v4/projects/65746188/packages/pypi/simple
 
 RUN --mount=type=cache,target=/root/.cache \
     --mount=type=bind,from=stage-1,source=/opt/jumpserver/pyproject.toml,target=pyproject.toml \
-    --mount=type=bind,from=stage-1,source=/opt/jumpserver/poetry.lock,target=poetry.lock \
     set -e \
-    && pip install poetry cryptography==${CRYPTOGRAPHY_VERSION} \
-    && python3 -m venv /opt/py3 \
+    && pip install uv \
+    && uv venv /opt/py3 \
     && . /opt/py3/bin/activate \
-    && poetry install --only main
+    && uv pip install -r pyproject.toml
 
 FROM python:3.11-slim-bookworm
 ENV LANG=en_US.UTF-8 \
     PATH=/opt/py3/bin:$PATH
 
 ARG DEPENDENCIES="                    \
-        freerdp2-dev                  \
-        libldap2-dev                  \
-        libpq-dev                     \
-        libx11-dev                    \
-        libxmlsec1-openssl"
-
-ARG TOOLS="                           \
         bubblewrap                    \
         ca-certificates               \
-        default-libmysqlclient-dev    \
-        default-mysql-client          \
         openssh-client                \
         sshpass"
 
@@ -128,7 +66,6 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     && ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime \
     && apt-get update \
     && apt-get -y install --no-install-recommends ${DEPENDENCIES} \
-    && apt-get -y install --no-install-recommends ${TOOLS} \
     && mkdir -p /root/.ssh/ \
     && echo "Host *\n\tStrictHostKeyChecking no\n\tUserKnownHostsFile /dev/null\n\tCiphers +aes128-cbc\n\tKexAlgorithms +diffie-hellman-group1-sha1\n\tHostKeyAlgorithms +ssh-rsa" > /root/.ssh/config
 

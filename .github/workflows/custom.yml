@@ -18,58 +18,17 @@ env:
   image_tag: ${{ github.event.inputs.version }}-ce
 
 jobs:
-  mirror:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        mirror: [ 'cn-north-1', 'cn-north-4', 'sa-brazil-1' ]
-    steps:
-      - name: Prepare configuration
-        run: |
-          wget -qO- https://github.com/google/go-containerregistry/releases/latest/download/go-containerregistry_Linux_x86_64.tar.gz | sudo tar -xzf - -C /usr/local/bin/ crane
-          sudo chmod +x /usr/local/bin/crane
-          sudo chown root:root /usr/local/bin/crane
-
-      - name: Login to HuaweiCloud Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: swr.${{ matrix.mirror }}.myhuaweicloud.com
-          username: ${{ matrix.mirror }}@${{ secrets.HUAWEICLOUD_AK }}
-          password: ${{ secrets.HUAWEICLOUD_TOKEN }}
-
-      - name: Pull and Push Images
-        run: |
-          case ${{ matrix.mirror }} in
-            cn-north-1)
-              platform=linux/amd64
-              ;;
-            cn-north-4)
-              platform=linux/arm64
-              ;;
-            sa-brazil-1)
-              platform=linux/s390x
-              ;;
-          esac
-          registry=swr.${{ matrix.mirror }}.myhuaweicloud.com
-          apps="core koko lion chen web"
-          for image_name in $apps; do
-            crane cp --platform ${platform} ghcr.io/${{ github.repository_owner }}/${image_name}:${{ env.image_tag }} ${registry}/jumpserver/${image_name}:${{ env.image_tag }}
-          done
-          crane cp --platform ${platform} redis:7-bookworm ${registry}/jumpserver/redis:7-bookworm
-          crane cp --platform ${platform} postgres:16-bookworm ${registry}/jumpserver/postgres:16-bookworm
-
   offline:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        architecture: [ 'x86_64', 'aarch64', 's390x' ]
+        architecture: [ 'x86_64', 'aarch64', 'ppc64le', 's390x' ]
     steps:
       - name: Prepare installer
         run: |
           mkdir -p dist
           git clone -b ${{ env.tag }} --depth=1 https://github.com/jumpserver/installer.git
           rm -rf installer/hudson.* installer/.travis.yml installer/.git installer/.github
-          sed -i "s@# DOCKER_IMAGE_MIRROR=1@DOCKER_IMAGE_MIRROR=1@g" installer/config-example.txt
           sed -i "s@VERSION=.*@VERSION=${{ env.image_tag }}@g" installer/static.env
           sed -i "s@VERSION=.*@VERSION=${{ env.tag }}@g" installer/quick_start.sh installer/cn-quick_start.sh
           sed -i "s@redis:7.0-bullseye@redis:7-bookworm@g" installer/scripts/utils.sh installer/compose/redis.yml
@@ -86,6 +45,9 @@ jobs:
               ;;
             aarch64)
               platform=linux/arm64
+              ;;
+            ppc64le)
+              platform=linux/ppc64le
               ;;
             s390x)
               platform=linux/s390x

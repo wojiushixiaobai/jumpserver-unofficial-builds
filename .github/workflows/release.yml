@@ -101,8 +101,7 @@ jobs:
         if: matrix.component == 'core'
         run: |
           sudo apt-get update
-          sudo apt-get -y install --no-install-recommends gettext g++ make pkg-config libsasl2-dev libxml2-dev libxmlsec1-dev libxmlsec1-openssl libldap2-dev default-mysql-client default-libmysqlclient-dev
-          pip install poetry
+          pip install uv
 
       - name: Create Workspace
         run: mkdir -p dist
@@ -148,10 +147,10 @@ jobs:
       - name: Build Core
         if: matrix.component == 'core'
         run: |
-          poetry config virtualenvs.create false
+          uv venv /tmp/py3
+          . /tmp/py3/bin/activate
           cp -f ../dockerfile/core/pyproject.toml .
-          poetry lock
-          poetry install --only main
+          uv pip install -r pyproject.toml
           sed -i "s@VERSION = .*@VERSION = '${{ env.version }}'@g" apps/jumpserver/const.py
           echo > config.yml
           export SECRET_KEY=$(head -c100 < /dev/urandom | base64 | tr -dc A-Za-z0-9 | head -c 48)
@@ -161,6 +160,8 @@ jobs:
           cd ..
           cp -R core core-${{ env.version }}
           tar -zcf dist/core-${{ env.version }}.tar.gz core-${{ env.version }}
+        env:
+          UV_EXTRA_INDEX_URL: https://gitlab.com/api/v4/projects/65746188/packages/pypi/simple
         working-directory: ./${{ matrix.component }}
 
       - name: Build Web
@@ -174,6 +175,7 @@ jobs:
               cp -R dist ../../${{ matrix.component }}-${{ env.version }}/ui
               cd ../../
               tar -zcvf dist/${{ matrix.component }}-${{ env.version }}.tar.gz ${{ matrix.component }}-${{ env.version }}
+              sed -i 's/@cd $(UIDIR)/# @cd $(UIDIR)/g' ${{ matrix.component }}-${{ env.version }}/Makefile
               ;;
             chen)
               cd frontend
@@ -226,16 +228,6 @@ jobs:
       matrix:
         component: [ core, koko, lion, chen, web ]
     steps:
-      - uses: jlumbroso/free-disk-space@main
-        with:
-          tool-cache: false
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: false
-          docker-images: false
-          swap-storage: false
-
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
         if: matrix.component != 'web'
@@ -246,9 +238,6 @@ jobs:
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
-        with:
-          # Until https://github.com/tonistiigi/binfmt/issues/215
-          image: tonistiigi/binfmt:qemu-v7.0.0
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -271,7 +260,7 @@ jobs:
           context: .
           provenance: false
           file: dockerfile/${{ matrix.component }}/Dockerfile
-          platforms: linux/amd64,linux/arm64,linux/s390x
+          platforms: linux/amd64,linux/arm64,linux/s390x,linux/ppc64le
           push: true
           build-args: |
             VERSION=${{ env.version }}
@@ -286,60 +275,18 @@ jobs:
           rm -rf /tmp/.buildx-cache
           mv /tmp/.buildx-cache-new /tmp/.buildx-cache
 
-  mirror:
-    runs-on: ubuntu-latest
-    needs: docker
-    strategy:
-      matrix:
-        mirror: [ 'cn-north-1', 'cn-north-4', 'sa-brazil-1' ]
-    steps:
-      - name: Prepare configuration
-        run: |
-          wget -qO- https://github.com/google/go-containerregistry/releases/latest/download/go-containerregistry_Linux_x86_64.tar.gz | sudo tar -xzf - -C /usr/local/bin/ crane
-          sudo chmod +x /usr/local/bin/crane
-          sudo chown root:root /usr/local/bin/crane
-
-      - name: Login to HuaweiCloud Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: swr.${{ matrix.mirror }}.myhuaweicloud.com
-          username: ${{ matrix.mirror }}@${{ secrets.HUAWEICLOUD_AK }}
-          password: ${{ secrets.HUAWEICLOUD_TOKEN }}
-
-      - name: Pull and Push Images
-        run: |
-          case ${{ matrix.mirror }} in
-            cn-north-1)
-              platform=linux/amd64
-              ;;
-            cn-north-4)
-              platform=linux/arm64
-              ;;
-            sa-brazil-1)
-              platform=linux/s390x
-              ;;
-          esac
-          registry=swr.${{ matrix.mirror }}.myhuaweicloud.com
-          apps="core koko lion chen web"
-          for image_name in $apps; do
-            crane cp --platform ${platform} ghcr.io/${{ github.repository_owner }}/${image_name}:${{ env.image_tag }} ${registry}/jumpserver/${image_name}:${{ env.image_tag }}
-          done
-          crane cp --platform ${platform} redis:7-bookworm ${registry}/jumpserver/redis:7-bookworm
-          crane cp --platform ${platform} postgres:16-bookworm ${registry}/jumpserver/postgres:16-bookworm
-
   offline:
     runs-on: ubuntu-latest
     needs: docker
     strategy:
       matrix:
-        architecture: [ 'x86_64', 'aarch64', 's390x' ]
+        architecture: [ 'x86_64', 'aarch64', 'ppc64le', 's390x' ]
     steps:
       - name: Prepare installer
         run: |
           mkdir -p dist
           git clone -b ${{ env.tag }} --depth=1 https://github.com/jumpserver/installer.git
           rm -rf installer/hudson.* installer/.travis.yml installer/.git installer/.github
-          sed -i "s@# DOCKER_IMAGE_MIRROR=1@DOCKER_IMAGE_MIRROR=1@g" installer/config-example.txt
           sed -i "s@VERSION=.*@VERSION=${{ env.image_tag }}@g" installer/static.env
           sed -i "s@VERSION=.*@VERSION=${{ env.tag }}@g" installer/quick_start.sh installer/cn-quick_start.sh
           sed -i "s@redis:7.0-bullseye@redis:7-bookworm@g" installer/scripts/utils.sh installer/compose/redis.yml
@@ -356,6 +303,9 @@ jobs:
               ;;
             aarch64)
               platform=linux/arm64
+              ;;
+            ppc64le)
+              platform=linux/ppc64le
               ;;
             s390x)
               platform=linux/s390x
